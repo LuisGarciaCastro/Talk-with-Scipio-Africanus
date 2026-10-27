@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Habla con Escipión</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=EB+Garamond:ital@0;1&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <header class="top">
+      <p class="eyebrow">Liternum · año 184 a.C.</p>
+      <h1>P. CORNELIVS SCIPIO</h1>
+      <p class="subtitle">Africanus · habla con él y aprende sobre su época</p>
+    </header>
+
+    <main class="layout">
+      <section class="call-col">
+        <div class="medallion" aria-hidden="true">
+          <div class="ring" id="ring"></div>
+          <div class="bust">SPQR</div>
+        </div>
+        <p class="status" id="status" role="status">Pulsa para hablar con Escipión</p>
+        <button id="callBtn" class="call">Llamar</button>
+        <p class="hint">Usa cascos y habla con normalidad. Puedes interrumpirle cuando quieras.</p>
+        <section class="transcript" id="transcript" aria-live="polite"></section>
+      </section>
+
+      <section class="board" aria-label="Imágenes que te enseña Escipión">
+        <article class="card" id="card">
+          <div class="card-empty">
+            <p class="card-empty-title">La tablilla de Escipión</p>
+            <p>Aquí aparecerán retratos, mapas, batallas, cuadros y libros a medida que te los vaya enseñando.</p>
+          </div>
+        </article>
+        <nav class="gallery" id="gallery" aria-label="Imágenes anteriores"></nav>
+      </section>
+    </main>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
