@@ -25,11 +25,11 @@ export const showImageDeclaration: FunctionDeclaration = {
       tipo: { type: Type.STRING, enum: [...CARD_TYPES], description: 'Qué clase de cosa es.' },
       busqueda: {
         type: Type.STRING,
-        description: 'Título del artículo en la Wikipedia en español, p. ej. "Batalla de Zama".',
+        description: 'Title of the English Wikipedia article, e.g. "Battle of Zama".',
       },
       explicacion: {
         type: Type.STRING,
-        description: 'Una frase sencilla para el alumno explicando por qué es importante.',
+        description: 'One simple sentence in English for the student explaining why it matters.',
       },
     },
     required: ['tipo', 'busqueda', 'explicacion'],

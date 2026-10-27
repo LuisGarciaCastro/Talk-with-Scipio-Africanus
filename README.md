@@ -47,7 +47,7 @@ Si cambias variables en Vercel, haz **Redeploy** para que se apliquen.
 | `vite.config.ts` | Envoltorio para el dev server local. |
 | `public/mic-worklet.js` | Micro → PCM 16-bit a 16 kHz. |
 | `src/audio.ts` | Captura, reproducción a 24 kHz y eco de mármol (reverb por convolución). |
-| `src/cards.ts` | Busca en Wikipedia (es, con imagen de en si falta) y construye la ficha. |
+| `src/cards.ts` | Busca en la Wikipedia en inglés y construye la ficha. |
 | `src/call.ts` | Orquesta la sesión Live: token → WebSocket → audio, interrupciones, transcripción. |
 | `src/main.ts` | Interfaz. |
 

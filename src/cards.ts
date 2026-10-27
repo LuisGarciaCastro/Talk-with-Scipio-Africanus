@@ -53,17 +53,18 @@ async function searchWikipedia(lang: 'es' | 'en', query: string): Promise<WikiPa
 }
 
 export async function buildCard(args: ShowImageArgs): Promise<Card> {
-  const es = await searchWikipedia('es', args.busqueda);
-  // Si el artículo en español no tiene imagen, la pedimos a la Wikipedia en inglés
-  const image = es?.thumbnail?.source ?? (await searchWikipedia('en', es?.title ?? args.busqueda))?.thumbnail?.source ?? null;
+  // Escipión habla en inglés: la ficha sale de la Wikipedia en inglés
+  const page = await searchWikipedia('en', args.busqueda);
+  // Si el artículo en inglés no tiene imagen (p. ej. "Battle of Zama"), la pedimos a la Wikipedia en español
+  const image = page?.thumbnail?.source ?? (await searchWikipedia('es', page?.title ?? args.busqueda))?.thumbnail?.source ?? null;
 
   return {
     tipo: args.tipo,
     explicacion: args.explicacion,
-    title: es?.title ?? args.busqueda,
-    extract: es?.extract ?? '',
+    title: page?.title ?? args.busqueda,
+    extract: page?.extract ?? '',
     image,
-    url: es?.fullurl ?? null,
+    url: page?.fullurl ?? null,
   };
 }
 
