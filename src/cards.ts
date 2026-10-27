@@ -14,49 +14,57 @@ interface WikiPage {
   extract?: string;
   fullurl?: string;
   thumbnail?: { source: string };
+  langlinks?: { lang: string; '*': string }[];
 }
 
 interface WikiResponse {
   query?: { pages?: Record<string, WikiPage> };
 }
 
-/**
- * Busca en Wikipedia (sin API key, CORS abierto con origin=*) y devuelve
- * título, resumen corto, imagen principal y enlace del mejor resultado.
- */
-async function searchWikipedia(lang: 'es' | 'en', query: string): Promise<WikiPage | null> {
-  const params = new URLSearchParams({
-    action: 'query',
-    format: 'json',
-    origin: '*',
-    redirects: '1',
+/** Consulta la API de Wikipedia (sin API key, CORS abierto con origin=*). Si tarda o falla, null. */
+async function queryWikipedia(lang: 'es' | 'en', params: Record<string, string>): Promise<WikiPage | null> {
+  const query = new URLSearchParams({ action: 'query', format: 'json', origin: '*', ...params });
+  try {
+    // Con la wifi del cole atascada, mejor una ficha sin datos que una cargando para siempre
+    const res = await fetch(`https://${lang}.wikipedia.org/w/api.php?${query}`, { signal: AbortSignal.timeout(6000) });
+    if (!res.ok) return null;
+    const data = (await res.json()) as WikiResponse;
+    return Object.values(data.query?.pages ?? {})[0] ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** Mejor resultado de la búsqueda en inglés: título, resumen, imagen, enlace y título en español. */
+function searchEnglish(search: string): Promise<WikiPage | null> {
+  return queryWikipedia('en', {
     generator: 'search',
-    gsrsearch: query,
+    gsrsearch: search,
     gsrlimit: '1',
-    prop: 'pageimages|extracts|info',
+    prop: 'pageimages|extracts|info|langlinks',
     piprop: 'thumbnail',
     pithumbsize: '900',
     exintro: '1',
     explaintext: '1',
     exsentences: '3',
     inprop: 'url',
+    lllang: 'es',
   });
-  try {
-    const res = await fetch(`https://${lang}.wikipedia.org/w/api.php?${params}`);
-    if (!res.ok) return null;
-    const data = (await res.json()) as WikiResponse;
-    const pages = Object.values(data.query?.pages ?? {});
-    return pages[0] ?? null;
-  } catch {
-    return null;
-  }
+}
+
+/** Imagen del artículo equivalente en español, buscado por su título exacto. */
+async function spanishImage(page: WikiPage): Promise<string | null> {
+  const title = page.langlinks?.[0]?.['*'];
+  if (!title) return null;
+  const es = await queryWikipedia('es', { titles: title, prop: 'pageimages', piprop: 'thumbnail', pithumbsize: '900' });
+  return es?.thumbnail?.source ?? null;
 }
 
 export async function buildCard(args: ShowImageArgs): Promise<Card> {
   // Escipión habla en inglés: la ficha sale de la Wikipedia en inglés
-  const page = await searchWikipedia('en', args.busqueda);
-  // Si el artículo en inglés no tiene imagen (p. ej. "Battle of Zama"), la pedimos a la Wikipedia en español
-  const image = page?.thumbnail?.source ?? (await searchWikipedia('es', page?.title ?? args.busqueda))?.thumbnail?.source ?? null;
+  const page = await searchEnglish(args.busqueda);
+  // Si el artículo no tiene imagen (p. ej. "Battle of Zama"), la del mismo artículo en español
+  const image = page ? (page.thumbnail?.source ?? (await spanishImage(page))) : null;
 
   return {
     tipo: args.tipo,

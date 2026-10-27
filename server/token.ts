@@ -38,6 +38,8 @@ export async function createLiveToken({ apiKey, model, voice }: TokenOptions): P
           speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: voice } } },
           inputAudioTranscription: {},
           outputAudioTranscription: {},
+          // Ventana deslizante: sin ella las sesiones de audio se cortan a los ~15 min
+          contextWindowCompression: { slidingWindow: {} },
         },
       },
     },

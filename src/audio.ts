@@ -5,15 +5,27 @@ export class MicCapture {
   private node: AudioWorkletNode | null = null;
   private analyser: AnalyserNode | null = null;
 
-  async start(onChunk: (base64Pcm: string) => void): Promise<void> {
+  /** Crea el contexto de audio. Llamar SIN await previo dentro del click: Safari/iOS lo exige. */
+  prepare(): void {
+    this.ctx = new AudioContext();
+    void this.ctx.resume();
+  }
+
+  /** Pide el micrófono (antes de abrir la sesión, para no gastar un token si lo deniegan). */
+  async open(): Promise<void> {
     this.stream = await navigator.mediaDevices.getUserMedia({
       audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1 },
     });
-    this.ctx = new AudioContext();
+  }
+
+  /** Empieza a mandar trozos de audio. Requiere prepare() y open(). */
+  async start(onChunk: (base64Pcm: string) => void): Promise<void> {
+    if (!this.ctx || !this.stream) throw new Error('Micrófono no preparado');
     await this.ctx.audioWorklet.addModule('/mic-worklet.js');
 
     const source = this.ctx.createMediaStreamSource(this.stream);
-    this.node = new AudioWorkletNode(this.ctx, 'mic-processor');
+    // Sin salidas: un nodo sin salidas se procesa siempre, aunque no esté conectado a nada
+    this.node = new AudioWorkletNode(this.ctx, 'mic-processor', { numberOfInputs: 1, numberOfOutputs: 0 });
     this.node.port.onmessage = (e: MessageEvent<ArrayBuffer>) => onChunk(arrayBufferToBase64(e.data));
 
     this.analyser = this.ctx.createAnalyser();
@@ -50,10 +62,11 @@ export class PcmPlayer {
   /**
    * Cadena: fuente → analyser ─┬─ dry ─────────────→ altavoz
    *                            └─ convolver → wet ─→ altavoz   (eco de atrio de mármol)
+   * Llamar SIN await previo dentro del click: Safari/iOS solo deja sonar contextos creados ahí.
    */
-  async start(): Promise<void> {
+  prepare(): void {
     this.ctx = new AudioContext({ sampleRate: 24000 });
-    await this.ctx.resume(); // Safari arranca los contextos "suspended"
+    void this.ctx.resume(); // Safari arranca los contextos "suspended"
     this.analyser = this.ctx.createAnalyser();
     this.analyser.fftSize = 256;
 

@@ -41,13 +41,23 @@ function saveCode(code: string | null): void {
   }
 }
 
-async function checkCode(code: string | null): Promise<string | null> {
-  const params = new URLSearchParams({ comprobar: '' });
-  if (code) params.set('clave', code);
-  const res = await fetch(`/api/token?${params}`);
-  if (res.ok) return null;
-  const body = (await res.json().catch(() => ({}))) as { error?: string };
-  return body.error ?? `Error ${res.status}`;
+interface CheckResult {
+  ok: boolean;
+  /** true solo si el servidor dice que la clave es incorrecta (401), no por un fallo de red. */
+  wrongCode: boolean;
+  error: string;
+}
+
+/** Valida la clave sin gastar un token. Va en una cabecera para que no quede en los logs. */
+async function checkCode(code: string | null): Promise<CheckResult> {
+  try {
+    const res = await fetch('/api/token?comprobar', { headers: code ? { 'X-Access-Code': code } : {} });
+    if (res.ok) return { ok: true, wrongCode: false, error: '' };
+    const body = (await res.json().catch(() => ({}))) as { error?: string };
+    return { ok: false, wrongCode: res.status === 401, error: body.error ?? `Error ${res.status}` };
+  } catch {
+    return { ok: false, wrongCode: false, error: 'No se pudo contactar con el servidor. Vuelve a intentarlo.' };
+  }
 }
 
 function unlock(code: string | null): void {
@@ -57,8 +67,9 @@ function unlock(code: string | null): void {
   app.hidden = false;
 }
 
-function lock(message = ''): void {
-  saveCode(null);
+/** Muestra la pantalla de la clave. Solo olvida la guardada si el servidor la ha rechazado. */
+function lock(message = '', forget = true): void {
+  if (forget) saveCode(null);
   app.hidden = true;
   gate.hidden = false;
   gateError.textContent = message;
@@ -69,12 +80,12 @@ gate.addEventListener('submit', async (e) => {
   e.preventDefault();
   const code = gateInput.value.trim();
   gateError.textContent = '';
-  const error = await checkCode(code).catch(() => 'No se pudo contactar con el servidor');
-  if (error) {
-    gateError.textContent = error;
-    gateInput.select();
-  } else {
+  const result = await checkCode(code);
+  if (result.ok) {
     unlock(code);
+  } else {
+    gateError.textContent = result.error;
+    gateInput.select();
   }
 });
 
@@ -86,10 +97,10 @@ async function initGate(): Promise<void> {
     params.delete('clave');
     history.replaceState(null, '', `${location.pathname}${params.size ? `?${params}` : ''}`);
   }
-  app.hidden = true;
-  const error = await checkCode(candidate).catch(() => 'No se pudo contactar con el servidor');
-  if (error) lock(candidate ? error : '');
-  else unlock(candidate);
+  const result = await checkCode(candidate);
+  if (result.ok) return unlock(candidate);
+  if (!result.wrongCode && candidate) gateInput.value = candidate; // fallo de red: basta con pulsar Entrar
+  lock(candidate ? result.error : '', result.wrongCode);
 }
 void initGate();
 
@@ -103,9 +114,12 @@ const STATUS_TEXT: Record<CallStatus, string> = {
 };
 
 let call: EscipionCall | null = null;
-let live: { speaker: Speaker; el: HTMLParagraphElement } | null = null;
+/** Burbuja abierta de cada uno: el texto del alumno puede seguir llegando mientras habla Escipión. */
+const live: Record<Speaker, HTMLParagraphElement | null> = { tu: null, escipion: null };
 let raf = 0;
 const cards: Card[] = [];
+let shown = -1; // índice de la ficha que se está viendo
+let latestRequest = 0;
 
 // ── Estado de la llamada ────────────────────────────────────────────────
 function setStatus(status: CallStatus, detail?: string): void {
@@ -118,29 +132,44 @@ function setStatus(status: CallStatus, detail?: string): void {
     cancelAnimationFrame(raf);
     call = null;
   }
-  if (status === 'error' && detail?.startsWith('Clave incorrecta')) lock(detail); // la clave ha cambiado
 }
 
 // ── Transcripción ───────────────────────────────────────────────────────
 function onTranscript(speaker: Speaker, text: string, final: boolean): void {
-  if (!live || live.speaker !== speaker) {
-    const el = document.createElement('p');
-    el.className = `line ${speaker}`;
-    transcript.append(el);
-    live = { speaker, el };
+  let line = live[speaker];
+  if (!line) {
+    line = document.createElement('p');
+    line.className = `line ${speaker}`;
+    transcript.append(line);
+    live[speaker] = line;
   }
-  live.el.textContent = text.trim();
+  line.textContent = text.trim();
   transcript.scrollTop = transcript.scrollHeight;
-  if (final) live = null;
+  if (final) live[speaker] = null;
 }
 
 // ── Fichas visuales ─────────────────────────────────────────────────────
+/**
+ * Reserva el hueco en la galería al pedir la ficha, para que el orden sea el
+ * de Escipión aunque Wikipedia conteste desordenado, y solo enseña la ficha
+ * si sigue siendo la última que ha pedido.
+ */
 async function onShowImage(args: ShowImageArgs): Promise<void> {
+  const request = ++latestRequest;
+  const index = cards.push({ tipo: args.tipo, explicacion: args.explicacion, title: args.busqueda, extract: '', image: null, url: null }) - 1;
   renderLoading(args);
   const card = await buildCard(args);
-  cards.push(card);
+  cards[index] = card;
+  if (request === latestRequest) show(index);
+  else renderGallery();
+}
+
+function show(index: number): void {
+  const card = cards[index];
+  if (!card) return;
+  shown = index;
   renderCard(card);
-  renderGallery(cards.length - 1);
+  renderGallery();
 }
 
 function renderLoading(args: ShowImageArgs): void {
@@ -176,7 +205,7 @@ function renderCard(card: Card): void {
     const a = document.createElement('a');
     a.href = card.url;
     a.target = '_blank';
-    a.rel = 'noopener';
+    a.rel = 'noopener noreferrer';
     a.className = 'card-link';
     a.textContent = 'Leer más en Wikipedia ↗';
     body.append(a);
@@ -184,19 +213,16 @@ function renderCard(card: Card): void {
   cardEl.replaceChildren(media, body);
 }
 
-function renderGallery(activeIndex: number): void {
+function renderGallery(): void {
   gallery.replaceChildren(
     ...cards.map((card, i) => {
       const b = document.createElement('button');
-      b.className = `thumb${i === activeIndex ? ' active' : ''}`;
+      b.className = `thumb${i === shown ? ' active' : ''}`;
       b.title = card.title;
       b.setAttribute('aria-label', `Ver ${card.title}`);
-      if (card.image) b.style.backgroundImage = `url("${card.image}")`;
+      if (card.image) b.style.backgroundImage = `url(${JSON.stringify(card.image)})`; // URL entre comillas escapadas
       else b.textContent = card.title.slice(0, 2);
-      b.addEventListener('click', () => {
-        renderCard(card);
-        renderGallery(i);
-      });
+      b.addEventListener('click', () => show(i));
       return b;
     }),
   );
@@ -222,20 +248,24 @@ function animate(): void {
 }
 
 btn.addEventListener('click', async () => {
-  if (call) {
-    await call.hangUp();
-    return;
-  }
+  if (call) return call.hangUp(); // también vale mientras conecta
   transcript.replaceChildren();
-  live = null;
-  call = new EscipionCall({ onStatus: setStatus, onTranscript, onShowImage: (a) => void onShowImage(a) });
+  live.tu = live.escipion = null;
+  // Los eventos de una llamada que ya no es la actual (p. ej. un error tardío) se ignoran
+  const current: EscipionCall = new EscipionCall({
+    onStatus: (s, d) => call === current && setStatus(s, d),
+    onTranscript: (s, t, f) => call === current && onTranscript(s, t, f),
+    onShowImage: (a) => call === current && void onShowImage(a),
+    onAccessDenied: (message) => lock(message), // la clave ha cambiado
+  });
+  call = current;
   raf = requestAnimationFrame(animate);
-  await call.start({ accessCode });
+  await current.start({ accessCode }); // sin await antes: el audio se prepara dentro del click
 });
 
 // Modo demo para ver la tablilla sin llamar: http://localhost:5173/?demo
 if (new URLSearchParams(location.search).has('demo')) {
-  void onShowImage({ tipo: 'personaje', busqueda: 'Escipión el Africano', explicacion: 'Este soy yo: el general que venció a Aníbal.' })
-    .then(() => onShowImage({ tipo: 'batalla', busqueda: 'Batalla de Zama', explicacion: 'Aquí terminó la segunda guerra púnica, en el 202 a.C.' }))
-    .then(() => onShowImage({ tipo: 'mapa', busqueda: 'Segunda guerra púnica', explicacion: 'El Mediterráneo en guerra: Roma contra Cartago.' }));
+  void onShowImage({ tipo: 'personaje', busqueda: 'Scipio Africanus', explicacion: 'This is me: the general who defeated Hannibal.' })
+    .then(() => onShowImage({ tipo: 'batalla', busqueda: 'Battle of Zama', explicacion: 'Here the Second Punic War ended, in 202 BC.' }))
+    .then(() => onShowImage({ tipo: 'mapa', busqueda: 'Second Punic War', explicacion: 'The Mediterranean at war: Rome against Carthage.' }));
 }

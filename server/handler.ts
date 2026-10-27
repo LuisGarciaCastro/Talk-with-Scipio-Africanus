@@ -1,3 +1,4 @@
+import { createHash, timingSafeEqual } from 'node:crypto';
 import { createLiveToken } from './token.js';
 
 export interface ServerEnv {
@@ -7,6 +8,8 @@ export interface ServerEnv {
   GEMINI_VOICE?: string;
   /** Si está definida, la app pide esta clave al entrar. */
   ACCESS_CODE?: string;
+  /** Lo pone Vercel: en producción la clave es obligatoria. */
+  VERCEL?: string;
 }
 
 export interface HandlerResult {
@@ -14,17 +17,31 @@ export interface HandlerResult {
   body: Record<string, unknown>;
 }
 
+/** Cabecera en la que el navegador manda la clave (no va en la URL para no quedar en los logs). */
+export const ACCESS_HEADER = 'x-access-code';
+
+/** Compara en tiempo constante (hash de ambos lados, así también da igual la longitud). */
+function sameCode(given: string, expected: string): boolean {
+  const digest = (s: string) => createHash('sha256').update(s).digest();
+  return timingSafeEqual(digest(given), digest(expected));
+}
+
 /**
  * Lógica de GET /api/token, independiente de dónde corra
  * (dev server de Vite en local o función serverless en Vercel).
  */
-export async function handleTokenRequest(url: URL, env: ServerEnv): Promise<HandlerResult> {
+export async function handleTokenRequest(url: URL, env: ServerEnv, accessCode: string | null): Promise<HandlerResult> {
   const apiKey = env.GEMINI_API_KEY;
   if (!apiKey || apiKey === 'pega_aqui_tu_key') {
     return { status: 500, body: { error: 'Falta GEMINI_API_KEY en el servidor' } };
   }
 
-  if (env.ACCESS_CODE && url.searchParams.get('clave') !== env.ACCESS_CODE) {
+  const expected = env.ACCESS_CODE?.trim();
+  if (!expected && env.VERCEL) {
+    // Sin clave en producción cualquiera podría gastar tu cuota: mejor no dar tokens
+    return { status: 500, body: { error: 'Falta ACCESS_CODE en el servidor' } };
+  }
+  if (expected && !sameCode(accessCode?.trim() ?? '', expected)) {
     return { status: 401, body: { error: 'Clave incorrecta. Pídesela a tu profesor.' } };
   }
 
@@ -39,6 +56,12 @@ export async function handleTokenRequest(url: URL, env: ServerEnv): Promise<Hand
     });
     return { status: 200, body: { ...result } };
   } catch (err) {
-    return { status: 502, body: { error: err instanceof Error ? err.message : String(err) } };
+    // El detalle va al log del servidor; al alumno, un mensaje entendible
+    console.error('Error creando el token de Gemini:', err);
+    const quota = /429|quota|exhausted/i.test(String(err));
+    return {
+      status: 502,
+      body: { error: quota ? 'Se ha agotado la cuota de Gemini. Espera un minuto y vuelve a llamar.' : 'No se pudo abrir la conversación con Gemini. Inténtalo de nuevo.' },
+    };
   }
 }
