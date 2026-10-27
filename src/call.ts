@@ -14,7 +14,7 @@ export interface CallEvents {
 }
 
 export interface CallOptions {
-  /** Clave del enlace compartido (?clave=...), si el servidor la exige. */
+  /** Clave de acceso introducida al entrar, si el servidor la exige. */
   accessCode: string | null;
 }
 
@@ -44,7 +44,7 @@ export class EscipionCall {
       this.session = await ai.live.connect({
         model,
         callbacks: {
-          onopen: () => this.events.onStatus('listening'),
+          onopen: () => this.events.onStatus('listening', 'salúdale para empezar'), // Escipión espera a que hable el alumno
           onmessage: (msg) => this.handleMessage(msg),
           onerror: (e) => this.fail(e.message || 'Error de conexión'),
           onclose: (e) => {
@@ -56,12 +56,6 @@ export class EscipionCall {
 
       await this.mic.start((data) => {
         this.session?.sendRealtimeInput({ audio: { data, mimeType: 'audio/pcm;rate=16000' } });
-      });
-
-      // Que sea Escipión quien salude primero
-      this.session.sendClientContent({
-        turns: [{ role: 'user', parts: [{ text: '(Un alumno acaba de llegar a tu villa para aprender sobre ti. Salúdale brevemente, preséntate, muéstrale tu retrato con la herramienta y pregúntale su nombre.)' }] }],
-        turnComplete: true,
       });
     } catch (err) {
       this.fail(err instanceof Error ? err.message : String(err));

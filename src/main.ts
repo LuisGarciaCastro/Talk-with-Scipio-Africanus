@@ -15,8 +15,83 @@ const transcript = $('transcript');
 const cardEl = $('card');
 const gallery = $('gallery');
 
-// Clave del enlace compartido: https://.../?clave=xxxx
-const accessCode = new URLSearchParams(location.search).get('clave');
+const gate = $<HTMLFormElement>('gate');
+const gateInput = $<HTMLInputElement>('gateInput');
+const gateError = $('gateError');
+const app = $('app');
+
+// ── Clave de acceso: se pide al entrar y se recuerda en este navegador ──
+const ACCESS_KEY = 'escipion-clave';
+let accessCode: string | null = null;
+
+function savedCode(): string | null {
+  try {
+    return localStorage.getItem(ACCESS_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function saveCode(code: string | null): void {
+  try {
+    if (code) localStorage.setItem(ACCESS_KEY, code);
+    else localStorage.removeItem(ACCESS_KEY);
+  } catch {
+    // sin almacenamiento: se volverá a pedir la próxima vez
+  }
+}
+
+async function checkCode(code: string | null): Promise<string | null> {
+  const params = new URLSearchParams({ comprobar: '' });
+  if (code) params.set('clave', code);
+  const res = await fetch(`/api/token?${params}`);
+  if (res.ok) return null;
+  const body = (await res.json().catch(() => ({}))) as { error?: string };
+  return body.error ?? `Error ${res.status}`;
+}
+
+function unlock(code: string | null): void {
+  accessCode = code;
+  saveCode(code);
+  gate.hidden = true;
+  app.hidden = false;
+}
+
+function lock(message = ''): void {
+  saveCode(null);
+  app.hidden = true;
+  gate.hidden = false;
+  gateError.textContent = message;
+  gateInput.focus();
+}
+
+gate.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const code = gateInput.value.trim();
+  gateError.textContent = '';
+  const error = await checkCode(code).catch(() => 'No se pudo contactar con el servidor');
+  if (error) {
+    gateError.textContent = error;
+    gateInput.select();
+  } else {
+    unlock(code);
+  }
+});
+
+// Al cargar: prueba la clave recordada (o la de un enlace antiguo con ?clave=)
+async function initGate(): Promise<void> {
+  const params = new URLSearchParams(location.search);
+  const candidate = params.get('clave') ?? savedCode();
+  if (params.has('clave')) {
+    params.delete('clave');
+    history.replaceState(null, '', `${location.pathname}${params.size ? `?${params}` : ''}`);
+  }
+  app.hidden = true;
+  const error = await checkCode(candidate).catch(() => 'No se pudo contactar con el servidor');
+  if (error) lock(candidate ? error : '');
+  else unlock(candidate);
+}
+void initGate();
 
 const STATUS_TEXT: Record<CallStatus, string> = {
   idle: 'Pulsa para hablar con Escipión',
@@ -43,6 +118,7 @@ function setStatus(status: CallStatus, detail?: string): void {
     cancelAnimationFrame(raf);
     call = null;
   }
+  if (status === 'error' && detail?.startsWith('Clave incorrecta')) lock(detail); // la clave ha cambiado
 }
 
 // ── Transcripción ───────────────────────────────────────────────────────

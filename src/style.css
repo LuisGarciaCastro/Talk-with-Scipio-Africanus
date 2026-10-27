@@ -27,6 +27,24 @@ body {
 h1 { margin: 6px 0 0; font-family: 'Cinzel', serif; font-weight: 700; letter-spacing: 0.12em; font-size: clamp(1.4rem, 4.5vw, 2.2rem); color: var(--gold); }
 .subtitle { margin: 2px 0 0; font-style: italic; color: var(--muted); font-size: 1.1rem; }
 
+/* ── Pantalla de entrada ── */
+.gate {
+  max-width: 420px; margin: 40px auto; padding: 32px 28px;
+  display: flex; flex-direction: column; align-items: center; gap: 14px; text-align: center;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 16px;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.35);
+}
+.gate[hidden], .layout[hidden] { display: none; }
+.gate-title { margin: 0; font-family: 'Cinzel', serif; color: var(--gold); font-size: 1.3rem; }
+.gate label { color: var(--muted); font-size: 1.05rem; }
+.gate input {
+  width: 100%; padding: 12px 16px; border-radius: 999px; text-align: center;
+  border: 1px solid var(--line); background: var(--bg); color: var(--ink);
+  font: inherit; font-size: 1.1rem;
+}
+.gate input:focus { outline: 2px solid var(--gold); outline-offset: 2px; }
+.gate-error { margin: 0; min-height: 1.4em; color: #e08a8a; font-size: 0.95rem; }
+
 /* ── Layout ── */
 .layout {
   max-width: 1180px; margin: 0 auto; padding: 16px;

@@ -3,9 +3,9 @@ import { createLiveToken } from './token.js';
 export interface ServerEnv {
   GEMINI_API_KEY?: string;
   GEMINI_LIVE_MODEL?: string;
-  /** Voz fija de Escipión. Por defecto Charon (grave y clara). */
+  /** Voz fija de Escipión. Por defecto Algenib (masculina y rasposa: un viejo general). */
   GEMINI_VOICE?: string;
-  /** Si está definida, hay que abrir el enlace con ?clave=<ACCESS_CODE>. */
+  /** Si está definida, la app pide esta clave al entrar. */
   ACCESS_CODE?: string;
 }
 
@@ -25,14 +25,17 @@ export async function handleTokenRequest(url: URL, env: ServerEnv): Promise<Hand
   }
 
   if (env.ACCESS_CODE && url.searchParams.get('clave') !== env.ACCESS_CODE) {
-    return { status: 401, body: { error: 'Clave incorrecta. Pide el enlace completo a tu profesor.' } };
+    return { status: 401, body: { error: 'Clave incorrecta. Pídesela a tu profesor.' } };
   }
+
+  // ?comprobar: la pantalla de entrada valida la clave sin gastar un token
+  if (url.searchParams.has('comprobar')) return { status: 200, body: { ok: true } };
 
   try {
     const result = await createLiveToken({
       apiKey,
       model: env.GEMINI_LIVE_MODEL || 'gemini-3.8-live',
-      voice: env.GEMINI_VOICE || 'Charon',
+      voice: env.GEMINI_VOICE || 'Algenib',
     });
     return { status: 200, body: { ...result } };
   } catch (err) {

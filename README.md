@@ -27,12 +27,12 @@ Usa Chrome o Safari, acepta el micrófono y **ponte cascos**.
 3. Antes de pulsar Deploy, en **Environment Variables** añade:
    - `GEMINI_API_KEY` = tu key
    - `ACCESS_CODE` = una palabra secreta, p. ej. `ave-scipio`
-   - (opcional) `GEMINI_LIVE_MODEL` y `GEMINI_VOICE` (voz fija, por defecto `Charon`)
+   - (opcional) `GEMINI_LIVE_MODEL` y `GEMINI_VOICE` (voz fija, por defecto `Algenib`)
 4. **Deploy**. Te dará una URL tipo `https://escipion-live.vercel.app`.
-5. Pasa a tus alumnos el enlace **con la clave**:
-   `https://escipion-live.vercel.app/?clave=ave-scipio`
+5. Pasa a tus alumnos el enlace y, aparte, la clave. Al entrar, la app pide la clave y la recuerda en ese navegador.
 
 Sin la clave, la app no da tokens: así nadie que encuentre la URL gasta tu cuota.
+(Los enlaces antiguos con `?clave=` siguen funcionando: la clave se guarda y desaparece de la barra de direcciones.)
 Si cambias variables en Vercel, haz **Redeploy** para que se apliquen.
 
 ## Estructura
@@ -54,6 +54,6 @@ Si cambias variables en Vercel, haz **Redeploy** para que se apliquen.
 ## Problemas típicos
 
 - **"Falta GEMINI_API_KEY"**: falta `.env` (local) o la variable en Vercel.
-- **"Clave incorrecta"**: el enlace no lleva `?clave=` o no coincide con `ACCESS_CODE`.
+- **"Clave incorrecta"**: la clave escrita al entrar no coincide con `ACCESS_CODE`.
 - **429 / quota**: has superado la capa gratuita; espera un minuto o activa facturación.
 - **Se oye a sí mismo**: usa cascos.

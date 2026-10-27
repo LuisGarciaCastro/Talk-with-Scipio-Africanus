@@ -34,10 +34,8 @@ export async function createLiveToken({ apiKey, model, voice }: TokenOptions): P
           systemInstruction: ESCIPION_SYSTEM_PROMPT,
           tools: [{ functionDeclarations: [showImageDeclaration] }],
           temperature: 0.8,
-          speechConfig: {
-            languageCode: 'es-ES',
-            voiceConfig: { prebuiltVoiceConfig: { voiceName: voice } },
-          },
+          // Sin languageCode: los modelos de audio nativo no lo admiten; el idioma va en el system prompt
+          speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: voice } } },
           inputAudioTranscription: {},
           outputAudioTranscription: {},
         },
