@@ -31,6 +31,8 @@ export class EscipionCall {
   private player = new PcmPlayer();
   private userText = '';
   private botText = '';
+  private spokeThisTurn = false;
+  private pendingCalls: { id?: string; name?: string }[] = [];
 
   constructor(private readonly events: CallEvents) {}
 
@@ -82,11 +84,13 @@ export class EscipionCall {
 
     if (content.interrupted) {
       this.player.interrupt(); // el usuario ha hablado por encima: callamos a Escipión
+      this.pendingCalls = []; // y no le damos pie a retomar la palabra
       this.flushBot();
     }
 
     for (const part of content.modelTurn?.parts ?? []) {
       if (part.inlineData?.data) {
+        this.spokeThisTurn = true;
         this.player.play(part.inlineData.data);
         this.events.onStatus('speaking');
       }
@@ -105,27 +109,34 @@ export class EscipionCall {
     if (content.turnComplete) {
       this.flushUser();
       this.flushBot();
+      // Si enseñó una ficha y cerró el turno sin decir nada, la respuesta le da pie a hablar
+      if (!this.spokeThisTurn && this.pendingCalls.length) this.answerPendingCalls();
+      else this.pendingCalls = [];
+      this.spokeThisTurn = false;
       this.waitUntilSilentThenListen();
     }
   }
 
   /**
-   * Escipión pide mostrar una imagen. Respondemos AL INSTANTE para que no se
-   * quede callado esperando, y la ficha se carga en paralelo en la UI.
+   * Escipión pide mostrar una imagen. La herramienta es no bloqueante y en
+   * principio NO respondemos: con gemini-3.8-live cualquier respuesta (incluso
+   * en SILENT) provoca un turno extra en el que repite lo dicho o habla por
+   * encima del alumno. Guardamos las llamadas por si el turno acaba sin que
+   * haya dicho nada (ver handleMessage).
    */
   private handleToolCall(msg: LiveServerMessage): void {
-    const calls = msg.toolCall?.functionCalls ?? [];
-    const functionResponses = calls.map((call) => {
+    for (const call of msg.toolCall?.functionCalls ?? []) {
       const args: unknown = call.args;
-      const ok = call.name === SHOW_IMAGE_TOOL && isShowImageArgs(args);
-      if (ok) this.events.onShowImage(args);
-      return {
-        id: call.id,
-        name: call.name,
-        response: ok ? { output: 'Imagen mostrada al alumno. Sigue hablando.' } : { error: 'Herramienta o argumentos no válidos' },
-      };
-    });
-    if (functionResponses.length) this.session?.sendToolResponse({ functionResponses });
+      if (call.name === SHOW_IMAGE_TOOL && isShowImageArgs(args)) this.events.onShowImage(args);
+      this.pendingCalls.push({ id: call.id, name: call.name });
+    }
+  }
+
+  /** Respondemos a las fichas pendientes para que Escipión siga hablando. */
+  private answerPendingCalls(): void {
+    const functionResponses = this.pendingCalls.map((c) => ({ ...c, response: { output: 'Ficha mostrada. Continúa.' } }));
+    this.pendingCalls = [];
+    this.session?.sendToolResponse({ functionResponses });
   }
 
   private flushUser(): void {
